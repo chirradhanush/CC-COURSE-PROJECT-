@@ -1,26 +1,3 @@
-# CC-COURSE-PROJECT
+# ITCS 6190/8190 – Cloud Computing for Data Analysis
 
-TEAM MEMBERS
-
-DHANUSH REDDY CHIRRA
-801425031
-dchirra@charlotte.edu
-
-BHARATH KUMAR NANGUNURI
-801420000
-bnangunu@charlotte.edu
-
-AVINASH KONDA
-801419999
-akonda@charlotte.edu
-
-YOGA SRI LELLA
-801428972
-ylella@charlotte.edu
-
-HRUSHITHA GOUD TIGULLA
-801419091
-htigulla@charlotte.edu
-
-
-DESCRIPTION
+## Course Project: Data Analysis with Apache Spark
