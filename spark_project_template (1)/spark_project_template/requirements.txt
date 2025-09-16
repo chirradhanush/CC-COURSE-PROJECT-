@@ -1,4 +1,0 @@
-pyspark
-pandas
-matplotlib
-pytest
