@@ -1,5 +1,5 @@
 # EDA Summary
-- Rows: **187**  |  Columns: **18**
+- Rows: **979**  |  Columns: **18**
 - Output tables: `reports\tables`
 - Output images: `reports\img`
 
