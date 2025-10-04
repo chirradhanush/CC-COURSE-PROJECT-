@@ -115,9 +115,18 @@ if __name__ == "__main__":
     else:
         clean = clean.withColumn("brand", F.lit("unknown"))
 
-    # ---- Ratings / Reviews: strip words and keep digits ----
+    # ---- Ratings / Reviews ----
+    # 1) Create ONE numeric `ratings` column (double) from any rating-like column.
     if rating_col:
-        clean = clean.withColumn("ratings", only_digits_to_long(rating_col, "ratings"))
+        s = F.coalesce(F.col(rating_col).cast("string"), F.lit(""))
+        s = F.regexp_extract(s, r"(\d[\d,\.]*)", 1)     # "4,278 Ratings" -> "4,278" ; "4.5 out of 5" -> "4.5"
+        s = F.regexp_replace(s, ",", "")
+        clean = clean.withColumn("ratings", F.when(F.length(s) > 0, s.cast("double")).otherwise(F.lit(None).cast("double")))
+        # 2) Drop any original stringy variant if its name differs from "ratings"
+        if rating_col != "ratings":
+            clean = clean.drop(rating_col)
+
+    # Reviews (count), keep as integer-like if present
     if reviews_col:
         clean = clean.withColumn("reviews", only_digits_to_long(reviews_col, "reviews"))
 
@@ -172,7 +181,6 @@ if __name__ == "__main__":
               .csv(csv_dir))
         print(f"[spark] Wrote CSV -> {csv_dir}")
     except Py4JJavaError as e:
-        # Be robust: check both java_exception and full string for the Windows native IO bug.
         emsg = (str(getattr(e, "java_exception", "")) or "") + " " + str(e)
         if ("UnsatisfiedLinkError" in emsg) or ("NativeIO$Windows.access0" in emsg):
             out_file = Path(args.output) / "clean.csv"
@@ -181,7 +189,6 @@ if __name__ == "__main__":
         else:
             raise
     except Exception as e:
-        # Last-resort catch: still try fallback if the same Windows signature appears.
         emsg = str(e)
         if ("UnsatisfiedLinkError" in emsg) or ("NativeIO$Windows.access0" in emsg):
             out_file = Path(args.output) / "clean.csv"
