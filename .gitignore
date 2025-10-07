@@ -1,5 +1,27 @@
-*.pyc
-__pycache__/
-.env
+@'
+# OS / IDE
 .DS_Store
-.ipynb_checkpoints/
+*.log
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Spark outputs & raw data
+data/raw/
+output/
+spark-warehouse/
+metastore_db/
+.derby/
+.temp/
+.parquet/
+*.crc
+
+# Checkpoints / staging
+checkpoint/
+.tmp/
+'@ | Out-File -Encoding utf8 .gitignore
