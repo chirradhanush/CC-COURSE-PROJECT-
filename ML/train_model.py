@@ -1,3 +1,14 @@
+#StringIndexer encodes categorical columns like street_marker and hour_bucket.
+
+#VectorAssembler combines numeric features into one vector.
+
+#StandardScaler normalizes the feature space.
+
+#LogisticRegression trains a binary classifier on label = target_occupied.
+
+#Added class weights to balance occupied / not-occupied samples.”
+
+
 from pyspark.sql import SparkSession, functions as F
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import StringIndexer, VectorAssembler, StandardScaler
