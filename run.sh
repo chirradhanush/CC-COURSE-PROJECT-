@@ -1,6 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
-python src/ingestion.py
-python src/transformations.py
-python src/streaming.py
+
+python src/prepare_data.py
 python src/ml_pipeline.py
