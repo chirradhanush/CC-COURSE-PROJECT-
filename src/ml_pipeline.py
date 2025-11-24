@@ -1,27 +1,5 @@
 #!/usr/bin/env python
 
-"""
-ml_pipeline.py
---------------
-Train and evaluate a classification model for Smart Parking occupancy.
-
-INPUT:
-    data/train_ready/   (parquet files written by prepare_data.py)
-
-STEPS:
-    - Load train_ready dataset
-    - Clean / cast columns
-    - Build Spark ML pipeline:
-        * StringIndexer for categorical features
-        * VectorAssembler for all features
-        * (optional) StandardScaler
-        * RandomForestClassifier (final model)
-    - Train / test split
-    - Evaluate (Accuracy, F1, AUC)
-    - Print confusion matrix
-    - Save trained model under ML/models/parking_rf_model
-"""
-
 from pathlib import Path
 
 from pyspark.sql import SparkSession, functions as F
@@ -32,6 +10,7 @@ from pyspark.ml.evaluation import (
     BinaryClassificationEvaluator,
     MulticlassClassificationEvaluator,
 )
+from pyspark.ml.tuning import TrainValidationSplit, ParamGridBuilder
 
 
 def get_paths():
@@ -58,33 +37,16 @@ def main():
     paths = get_paths()
     train_ready_path = paths["train_ready"]
 
-    print(f"[ml_pipeline] Using train_ready from: {train_ready_path}")
+    print(f"[ml_pipeline] Reading train_ready from: {train_ready_path}")
 
     spark = create_spark()
 
-    # ===========================
-    # 1. LOAD DATA
-    # ===========================
+    # Load data
     df = spark.read.parquet(str(train_ready_path))
-
-    print(f"[ml_pipeline] Loaded rows = {df.count()}, columns = {len(df.columns)}")
-    print("[ml_pipeline] Columns:", df.columns)
-
-    # Ensure label column exists
-    if "target_occupied" not in df.columns:
-        raise ValueError("Expected column 'target_occupied' not found in train_ready data.")
-
-    # ===========================
-    # 2. BASIC CLEANING
-    # ===========================
-    # Drop rows with null label
     df = df.filter(F.col("target_occupied").isNotNull())
-
-    # Cast label to double and rename to "label" (Spark ML convention)
     df = df.withColumn("label", F.col("target_occupied").cast("double"))
 
-    # Drop rows with missing critical numerical features if needed
-    # (You can adjust this list if you see lots of nulls)
+    # Numeric features
     numeric_cols = [
         "duration_min",
         "hour",
@@ -100,10 +62,7 @@ def main():
     for c in numeric_cols:
         df = df.filter(F.col(c).isNotNull())
 
-    # ===========================
-    # 3. DEFINE FEATURES
-    # ===========================
-    # Categorical columns to index
+    # Categorical features
     cat_cols = []
     if "device_id" in df.columns:
         cat_cols.append("device_id")
@@ -112,29 +71,20 @@ def main():
     if "PartOfDay" in df.columns:
         cat_cols.append("PartOfDay")
 
+    print("Numeric:", numeric_cols)
+    print("Categorical:", cat_cols)
+
     indexers = [
-        StringIndexer(
-            inputCol=c,
-            outputCol=f"{c}_idx",
-            handleInvalid="keep"
-        )
+        StringIndexer(inputCol=c, outputCol=f"{c}_idx", handleInvalid="keep")
         for c in cat_cols
     ]
+    indexed_cat = [f"{c}_idx" for c in cat_cols]
 
-    indexed_cat_cols = [f"{c}_idx" for c in cat_cols]
+    feature_cols = numeric_cols + indexed_cat
+    print("ALL FEATURES:", feature_cols)
 
-    feature_cols = numeric_cols + indexed_cat_cols
+    assembler = VectorAssembler(inputCols=feature_cols, outputCol="features_raw")
 
-    print("[ml_pipeline] Numeric feature columns:", numeric_cols)
-    print("[ml_pipeline] Categorical feature columns:", cat_cols)
-    print("[ml_pipeline] All feature columns:", feature_cols)
-
-    assembler = VectorAssembler(
-        inputCols=feature_cols,
-        outputCol="features_raw"
-    )
-
-    # StandardScaler is mostly useful for linear models, but it's fine to use here
     scaler = StandardScaler(
         inputCol="features_raw",
         outputCol="features",
@@ -142,92 +92,84 @@ def main():
         withMean=False,
     )
 
-    # ===========================
-    # 4. MODEL
-    # ===========================
-    # You can tweak hyperparameters if you like
+    # ------------------------------------------------------------
+    # YOUR HIGH-ACCURACY RF MODEL EXACTLY AS YOU PROVIDED
+    # ------------------------------------------------------------
     rf = RandomForestClassifier(
-        labelCol="label",
         featuresCol="features",
-        numTrees=100,
-        maxDepth=10,
+        labelCol="label",
         seed=42,
+        featureSubsetStrategy="sqrt",
+        probabilityCol="rf_prob"
     )
 
-    # Full pipeline
-    stages = indexers + [assembler, scaler, rf]
-    pipeline = Pipeline(stages=stages)
-
-    # ===========================
-    # 5. TRAIN / TEST SPLIT
-    # ===========================
-    train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
-
-    print(f"[ml_pipeline] Train rows = {train_df.count()}, Test rows = {test_df.count()}")
-
-    # ===========================
-    # 6. FIT MODEL
-    # ===========================
-    print("[ml_pipeline] Training RandomForest model...")
-    model = pipeline.fit(train_df)
-
-    # ===========================
-    # 7. EVALUATE
-    # ===========================
-    pred_df = model.transform(test_df).cache()
-
-    print("[ml_pipeline] Example predictions:")
-    pred_df.select("device_id", "street_marker", "label", "prediction", "probability").show(10, truncate=False)
-
-    # AUC (Binary)
-    bin_eval = BinaryClassificationEvaluator(
+    evaluator = BinaryClassificationEvaluator(
         labelCol="label",
         rawPredictionCol="rawPrediction",
-        metricName="areaUnderROC",
+        metricName="areaUnderROC"
     )
-    auc = bin_eval.evaluate(pred_df)
 
-    # Accuracy & F1
-    acc_eval = MulticlassClassificationEvaluator(
+    paramGrid = (
+        ParamGridBuilder()
+        .addGrid(rf.numTrees, [100, 200])
+        .addGrid(rf.maxDepth, [8, 12])
+        .build()
+    )
+
+    pipeline = Pipeline(stages=indexers + [assembler, scaler, rf])
+
+    train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
+
+    tvs = TrainValidationSplit(
+        estimator=pipeline,
+        estimatorParamMaps=paramGrid,
+        evaluator=evaluator,
+        trainRatio=0.8,
+        parallelism=1
+    )
+
+    print("[ml_pipeline] Training tuned RF model...")
+    tvs_model = tvs.fit(train_df)
+    best_rf_model = tvs_model.bestModel
+
+    print("Best params:")
+    print("  numTrees:", best_rf_model.stages[-1].getNumTrees)
+    print("  maxDepth:", best_rf_model.stages[-1].getOrDefault("maxDepth"))
+
+    # Predictions
+    preds = best_rf_model.transform(test_df)
+
+    auc_eval = BinaryClassificationEvaluator(
         labelCol="label",
-        predictionCol="prediction",
-        metricName="accuracy",
+        rawPredictionCol="rawPrediction",
+        metricName="areaUnderROC"
+    )
+    acc_eval = MulticlassClassificationEvaluator(
+        labelCol="label", predictionCol="prediction", metricName="accuracy"
     )
     f1_eval = MulticlassClassificationEvaluator(
-        labelCol="label",
-        predictionCol="prediction",
-        metricName="f1",
+        labelCol="label", predictionCol="prediction", metricName="f1"
     )
 
-    accuracy = acc_eval.evaluate(pred_df)
-    f1 = f1_eval.evaluate(pred_df)
+    auc = auc_eval.evaluate(preds)
+    acc = acc_eval.evaluate(preds)
+    f1 = f1_eval.evaluate(preds)
 
-    print("\n================ ML METRICS ================")
-    print(f"AUC        : {auc:.4f}")
-    print(f"Accuracy   : {accuracy:.4f}")
-    print(f"F1-score   : {f1:.4f}")
-    print("============================================\n")
+    print("\n====== FINAL METRICS (TUNED RF) ======")
+    print(f"AUC:      {auc:.4f}")
+    print(f"Accuracy: {acc:.4f}")
+    print(f"F1:       {f1:.4f}")
+    print("=====================================\n")
 
-    # Confusion matrix
-    print("[ml_pipeline] Confusion matrix (label vs prediction):")
-    cm = (
-        pred_df.groupBy("label", "prediction")
-        .count()
-        .orderBy("label", "prediction")
-    )
-    cm.show()
+    print("Confusion Matrix:")
+    preds.groupBy("prediction", "label").count().orderBy("prediction", "label").show()
 
-    # ===========================
-    # 8. SAVE MODEL
-    # ===========================
+    # Save model
     model_dir = paths["model_dir"]
     model_dir.parent.mkdir(parents=True, exist_ok=True)
+    best_rf_model.write().overwrite().save(str(model_dir))
 
-    print(f"[ml_pipeline] Saving model to: {model_dir}")
-    # Overwrite if exists
-    model.write().overwrite().save(str(model_dir))
-
-    print("[ml_pipeline] ✔ DONE")
+    print("[ml_pipeline] DONE.")
     spark.stop()
 
 
