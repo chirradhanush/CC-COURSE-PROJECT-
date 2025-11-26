@@ -14,6 +14,8 @@ from pyspark.ml.evaluation import (
     MulticlassClassificationEvaluator,
 )
 from pyspark.ml.tuning import TrainValidationSplit, ParamGridBuilder
+from pyspark.ml.functions import vector_to_array
+
 
 
 def get_paths():
@@ -237,10 +239,13 @@ def main():
 
     # 2) Save predictions on the test set
     #    - We also create a scalar prob_occupied = P(label=1)
+    # 2) Save predictions on the test set
+#    - We also create a scalar prob_occupied = P(label=1)
     rf_preds_with_prob = rf_preds.withColumn(
         "prob_occupied",
-        F.col("rf_prob")[1]  # assuming binary classification: [P(0), P(1)]
+        vector_to_array("rf_prob")[1]  # convert vector -> array -> take class-1 prob
     )
+
 
     # Choose a useful subset of columns
     pred_cols = ["label", "prediction", "prob_occupied"] + existing_numeric + existing_cat
