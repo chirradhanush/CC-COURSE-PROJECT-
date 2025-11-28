@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+import pandas as pd
+from pathlib import Path
+
+
 from pathlib import Path
 from pyspark.sql import SparkSession, functions as F
 from pyspark.ml.feature import StringIndexer, VectorAssembler, StandardScaler
@@ -10,6 +14,8 @@ from pyspark.ml.evaluation import (
     MulticlassClassificationEvaluator,
 )
 from pyspark.ml.tuning import TrainValidationSplit, ParamGridBuilder
+from pyspark.ml.functions import vector_to_array
+
 
 
 def get_paths():
@@ -220,6 +226,45 @@ def main():
 
     print("Confusion matrix (prediction vs label):")
     rf_preds.groupBy("prediction", "label").count().orderBy("prediction", "label").show()
+
+    
+    # ==================================================
+    # SAVE DATA FOR DASHBOARD (predictions + importances)
+    # ==================================================
+
+    # 1) Directory for dashboard-friendly model data
+    root = Path(__file__).resolve().parents[1]
+    model_data_dir = root / "data" / "model"
+    model_data_dir.mkdir(parents=True, exist_ok=True)
+
+    # 2) Save predictions on the test set
+    #    - We also create a scalar prob_occupied = P(label=1)
+    # 2) Save predictions on the test set
+#    - We also create a scalar prob_occupied = P(label=1)
+    rf_preds_with_prob = rf_preds.withColumn(
+        "prob_occupied",
+        vector_to_array("rf_prob")[1]  # convert vector -> array -> take class-1 prob
+    )
+
+
+    # Choose a useful subset of columns
+    pred_cols = ["label", "prediction", "prob_occupied"] + existing_numeric + existing_cat
+    pred_cols = [c for c in pred_cols if c in rf_preds_with_prob.columns]
+
+    rf_preds_pd = rf_preds_with_prob.select(*pred_cols).toPandas()
+    rf_preds_path = model_data_dir / "predictions.csv"
+    rf_preds_pd.to_csv(rf_preds_path, index=False)
+    print(f"[ml_pipeline] Saved predictions to {rf_preds_path}")
+
+    # 3) Save feature importances
+    feature_cols = existing_numeric + [f"{c}_idx" for c in existing_cat]
+    importances = best_rf_model.featureImportances.toArray().tolist()
+    fi_df = pd.DataFrame({"feature": feature_cols, "importance": importances})
+
+    fi_path = model_data_dir / "feature_importances.csv"
+    fi_df.to_csv(fi_path, index=False)
+    print(f"[ml_pipeline] Saved feature importances to {fi_path}")
+
 
     # 9) Save the best model
     model_dir = paths["model_dir"]
