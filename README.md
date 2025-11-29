@@ -226,12 +226,9 @@ python src/ml_pipeline.py
 
 Generates:
 
-- train-ready data  
-- predictions  
-- feature importances  
-- trained ML model  
+## 📈 6. Dashboard 
 
----
+A full **Streamlit dashboard** (`dashboard.py`) visualizes:
 
 # 🖥️ Running the Dashboard Locally
 
