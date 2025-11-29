@@ -124,9 +124,9 @@ python src/ml_pipeline.py
 
 ---
 
-## 📈 6. Dashboard (Work in Progress)
+## 📈 6. Dashboard 
 
-A full **Streamlit dashboard** (`dashboard.py`) will visualize:
+A full **Streamlit dashboard** (`dashboard.py`) visualizes:
 
 - Peak occupancy hours  
 - Heatmaps of demand (Hour × Day)  
