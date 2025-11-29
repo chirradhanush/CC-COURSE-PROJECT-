@@ -230,9 +230,15 @@ Generates:
 
 A full **Streamlit dashboard** (`dashboard.py`) visualizes:
 
-# 🖥️ Running the Dashboard Locally
+- Peak occupancy hours  
+- Heatmaps of demand (Hour × Day)  
+- Violation hotspots  
+- Dwell-time patterns  
+- Confusion matrix  
+- ROC curve  
+- Feature importance plots  
 
-After pipeline execution:
+To run (after ML pipeline is executed):
 
 ```
 streamlit run dashboard.py
