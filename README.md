@@ -280,6 +280,7 @@ This repository demonstrates a complete **production-style big data workflow**, 
 - Analytics dashboard  
 - Clear interpretability & insights  
 
-#VIDEO PRESENTATION LINK
-https://drive.google.com/file/d/1j0-Pg-sE6UaMBUS9wlyaugZ1rfjm2uvA/view?usp=drive_link
+## 📽️ Video Presentation
+🔗 [Click here to watch the video](https://drive.google.com/file/d/1j0-Pg-sE6UaMBUS9wlyaugZ1rfjm2uvA/view?usp=drive_link)
+
 
